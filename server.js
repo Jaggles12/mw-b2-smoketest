@@ -79,4 +79,35 @@ app.get("/db-test", async (_, res) => {
   }
 });
 
+app.get("/db-init", async (_, res) => {
+  try {
+    const sql = `
+      create extension if not exists pgcrypto;
+
+      create table if not exists runs (
+        id uuid primary key default gen_random_uuid(),
+        type text not null check (type in ('text','image')),
+        project text not null,
+        status text not null default 'queued'
+          check (status in ('queued','running','succeeded','failed')),
+        params jsonb not null default '{}'::jsonb,
+        b2_prefix text,
+        result jsonb not null default '{}'::jsonb,
+        error text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+
+      create index if not exists runs_project_idx on runs(project);
+      create index if not exists runs_type_idx on runs(type);
+      create index if not exists runs_status_idx on runs(status);
+    `;
+
+    await pool.query(sql);
+    res.json({ ok: true, message: "runs table created" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.listen(PORT, () => console.log(`listening on ${PORT}`));
