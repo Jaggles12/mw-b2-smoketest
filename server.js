@@ -92,5 +92,39 @@ app.get("/b2-test", async (_, res) => {
 /* --- Postgres smoke test --- */
 app.get("/db-test", async (_, res) => {
   try {
-    const { rows } = await poo
+    const { rows } = await pool.query(
+      `
+      insert into runs (type, project, status, params, b2_prefix)
+      values ($1, $2, $3, $4::jsonb, $5)
+      returning id, type, project, status, created_at
+      `,
+      [
+        "image",
+        "juniper-hollow",
+        "queued",
+        JSON.stringify({ note: "railway db smoketest" }),
+        "images/coloring-books/juniper-hollow/runs/db-smoketest"
+      ]
+    );
+
+    res.json({
+      ok: true,
+      run: rows[0]
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      error: err?.message ?? String(err)
+    });
+  }
+});
+
+/* =========================
+   Start server
+   ========================= */
+
+app.listen(PORT, () => {
+  console.log(`openclaw listening on port ${PORT}`);
+});
+
 
