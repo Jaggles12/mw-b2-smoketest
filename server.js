@@ -4,6 +4,8 @@ const { Pool } = pg;
 import express from "express";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
 const {
   B2_KEY_ID,
   B2_APP_KEY,
@@ -15,6 +17,9 @@ const {
 
 // fail fast if anything is missing
 for (const k of ["B2_KEY_ID","B2_APP_KEY","B2_BUCKET","B2_ENDPOINT","B2_REGION"]) {
+  if (!process.env[k]) throw new Error(`Missing env var: ${k}`);
+}
+for (const k of ["B2_KEY_ID","B2_APP_KEY","B2_BUCKET","B2_ENDPOINT","B2_REGION","DATABASE_URL"]) {
   if (!process.env[k]) throw new Error(`Missing env var: ${k}`);
 }
 
@@ -49,6 +54,28 @@ app.get("/b2-test", async (_, res) => {
       ok: false,
       message: err?.message ?? String(err),
     });
+  }
+});
+
+app.get("/db-test", async (_, res) => {
+  try {
+    const q = `
+      insert into runs (type, project, status, params, b2_prefix)
+      values ($1, $2, $3, $4::jsonb, $5)
+      returning id, type, project, status, created_at
+    `;
+    const values = [
+      "image",
+      "juniper-hollow",
+      "queued",
+      JSON.stringify({ note: "railway db smoketest" }),
+      "images/coloring-books/juniper-hollow/runs/db-smoketest"
+    ];
+
+    const { rows } = await pool.query(q, values);
+    res.json({ ok: true, run: rows[0] });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: err?.message ?? String(err) });
   }
 });
 
