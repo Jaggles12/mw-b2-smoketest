@@ -1,3 +1,6 @@
+import pg from "pg";
+const { Pool } = pg;
+
 import express from "express";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 
