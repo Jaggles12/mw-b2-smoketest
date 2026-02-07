@@ -15,6 +15,8 @@ const REQUIRED_ENV = [
   "B2_BUCKET",
   "B2_ENDPOINT",
   "B2_REGION"
+  // NOTE: ADMIN_MIGRATE_TOKEN is intentionally NOT required.
+  // You can add it in Railway when you're ready to run the migration.
 ];
 
 for (const key of REQUIRED_ENV) {
@@ -30,6 +32,7 @@ const {
   B2_BUCKET,
   B2_ENDPOINT,
   B2_REGION,
+  ADMIN_MIGRATE_TOKEN,
   PORT = 3000
 } = process.env;
 
@@ -56,6 +59,10 @@ const s3 = new S3Client({
    ========================= */
 
 const app = express();
+app.use(express.json());
+
+/* --- Root (so you don't see "Cannot GET /") --- */
+app.get("/", (_, res) => res.send("ok"));
 
 /* --- Health --- */
 app.get("/health", (_, res) => {
@@ -119,10 +126,15 @@ app.get("/db-test", async (_, res) => {
   }
 });
 
+/* --- One-time migration route (REMOVE after success) --- */
 app.get("/__admin/migrate-artifacts", async (req, res) => {
   try {
-    // simple protection: require a token in the URL
-    if (req.query.token !== process.env.ADMIN_MIGRATE_TOKEN) {
+    // If you haven't set ADMIN_MIGRATE_TOKEN in Railway yet, this route should not run.
+    if (!ADMIN_MIGRATE_TOKEN) {
+      return res.status(500).send("ADMIN_MIGRATE_TOKEN is not set");
+    }
+
+    if (req.query.token !== ADMIN_MIGRATE_TOKEN) {
       return res.status(401).send("Unauthorized");
     }
 
@@ -145,7 +157,7 @@ app.get("/__admin/migrate-artifacts", async (req, res) => {
     res.send("ok");
   } catch (err) {
     console.error(err);
-    res.status(500).send(String(err));
+    res.status(500).send(err?.message ?? String(err));
   }
 });
 
@@ -153,8 +165,6 @@ app.get("/__admin/migrate-artifacts", async (req, res) => {
    Start server
    ========================= */
 
-app.listen(PORT, () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`openclaw listening on port ${PORT}`);
 });
-
-
