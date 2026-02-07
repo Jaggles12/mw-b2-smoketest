@@ -202,6 +202,26 @@ app.get("/__admin/migrate-artifacts", async (req, res) => {
   }
 });
 
+app.get("/__admin/fix-artifacts-id-default", async (req, res) => {
+  try {
+    if (req.query.token !== process.env.ADMIN_MIGRATE_TOKEN) {
+      return res.status(401).send("Unauthorized");
+    }
+
+    await pool.query(`
+      create extension if not exists pgcrypto;
+
+      alter table artifacts
+        alter column id set default gen_random_uuid();
+    `);
+
+    res.send("ok");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(err?.message ?? String(err));
+  }
+});
+
 /* =========================
    Start server
    ========================= */
