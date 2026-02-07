@@ -119,6 +119,36 @@ app.get("/db-test", async (_, res) => {
   }
 });
 
+app.get("/__admin/migrate-artifacts", async (req, res) => {
+  try {
+    // simple protection: require a token in the URL
+    if (req.query.token !== process.env.ADMIN_MIGRATE_TOKEN) {
+      return res.status(401).send("Unauthorized");
+    }
+
+    await db.query(`
+      create extension if not exists pgcrypto;
+
+      create table if not exists artifacts (
+        id uuid primary key default gen_random_uuid(),
+        run_id uuid not null references runs(id) on delete cascade,
+        kind text not null check (kind in ('image','text','model','other')),
+        path text not null,
+        metadata jsonb not null default '{}'::jsonb,
+        created_at timestamptz not null default now()
+      );
+
+      create index if not exists artifacts_run_idx on artifacts(run_id);
+      create index if not exists artifacts_kind_idx on artifacts(kind);
+    `);
+
+    res.send("ok");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send(String(err));
+  }
+});
+
 /* =========================
    Start server
    ========================= */
