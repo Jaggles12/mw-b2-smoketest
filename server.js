@@ -126,7 +126,7 @@ app.get("/__admin/migrate-artifacts", async (req, res) => {
       return res.status(401).send("Unauthorized");
     }
 
-    await db.query(`
+    await pool.query(`
       create extension if not exists pgcrypto;
 
       create table if not exists artifacts (
