@@ -15,8 +15,6 @@ const REQUIRED_ENV = [
   "B2_BUCKET",
   "B2_ENDPOINT",
   "B2_REGION"
-  // NOTE: ADMIN_MIGRATE_TOKEN is intentionally NOT required.
-  // You can add it in Railway when you're ready to run the migration.
 ];
 
 for (const key of REQUIRED_ENV) {
@@ -32,7 +30,6 @@ const {
   B2_BUCKET,
   B2_ENDPOINT,
   B2_REGION,
-  ADMIN_MIGRATE_TOKEN,
   PORT = 3000
 } = process.env;
 
@@ -61,7 +58,7 @@ const s3 = new S3Client({
 const app = express();
 app.use(express.json());
 
-/* --- Root (so you don't see "Cannot GET /") --- */
+/* --- Root --- */
 app.get("/", (_, res) => res.send("ok"));
 
 /* --- Health --- */
@@ -83,20 +80,13 @@ app.get("/b2-test", async (_, res) => {
       })
     );
 
-    res.json({
-      ok: true,
-      bucket: B2_BUCKET,
-      key
-    });
+    res.json({ ok: true, bucket: B2_BUCKET, key });
   } catch (err) {
-    res.status(500).json({
-      ok: false,
-      error: err?.message ?? String(err)
-    });
+    res.status(500).json({ ok: false, error: err?.message ?? String(err) });
   }
 });
 
-/* --- Postgres smoke test --- */
+/* --- Postgres smoke test (runs insert) --- */
 app.get("/db-test", async (_, res) => {
   try {
     const { rows } = await pool.query(
@@ -114,38 +104,49 @@ app.get("/db-test", async (_, res) => {
       ]
     );
 
-    res.json({
-      ok: true,
-      run: rows[0]
-    });
+    res.json({ ok: true, run: rows[0] });
   } catch (err) {
-    res.status(500).json({
-      ok: false,
-      error: err?.message ?? String(err)
-    });
+    res.status(500).json({ ok: false, error: err?.message ?? String(err) });
   }
 });
 
-    await pool.query(`
-      create extension if not exists pgcrypto;
+/* --- Artifacts smoke test (creates run + artifact) --- */
+app.get("/artifact-test", async (_, res) => {
+  try {
+    const run = await pool.query(
+      `
+      insert into runs (type, project, status, params, b2_prefix)
+      values ($1, $2, $3, $4::jsonb, $5)
+      returning id
+      `,
+      [
+        "image",
+        "juniper-hollow",
+        "queued",
+        JSON.stringify({ note: "artifact smoketest" }),
+        "images/coloring-books/juniper-hollow/runs/artifact-smoketest"
+      ]
+    );
 
-      create table if not exists artifacts (
-        id uuid primary key default gen_random_uuid(),
-        run_id uuid not null references runs(id) on delete cascade,
-        kind text not null check (kind in ('image','text','model','other')),
-        path text not null,
-        metadata jsonb not null default '{}'::jsonb,
-        created_at timestamptz not null default now()
-      );
+    const runId = run.rows[0].id;
 
-      create index if not exists artifacts_run_idx on artifacts(run_id);
-      create index if not exists artifacts_kind_idx on artifacts(kind);
-    `);
+    const artifact = await pool.query(
+      `
+      insert into artifacts (run_id, kind, path, metadata)
+      values ($1, $2, $3, $4::jsonb)
+      returning id, run_id, kind, path, created_at
+      `,
+      [
+        runId,
+        "image",
+        "images/coloring-books/juniper-hollow/runs/artifact-smoketest/page-01.png",
+        JSON.stringify({ note: "placeholder row, no file uploaded yet" })
+      ]
+    );
 
-    res.send("ok");
+    res.json({ ok: true, runId, artifact: artifact.rows[0] });
   } catch (err) {
-    console.error(err);
-    res.status(500).send(err?.message ?? String(err));
+    res.status(500).json({ ok: false, error: err?.message ?? String(err) });
   }
 });
 
@@ -156,3 +157,4 @@ app.get("/db-test", async (_, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`openclaw listening on port ${PORT}`);
 });
+
