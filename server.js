@@ -126,59 +126,6 @@ app.get("/db-test", async (_, res) => {
   }
 });
 
-app.get("/artifact-test", async (_, res) => {
-  try {
-    // 1) create a run (or reuse an existing run id if you want)
-    const run = await pool.query(
-      `
-      insert into runs (type, project, status, params, b2_prefix)
-      values ($1, $2, $3, $4::jsonb, $5)
-      returning id
-      `,
-      [
-        "image",
-        "juniper-hollow",
-        "queued",
-        JSON.stringify({ note: "artifact smoketest" }),
-        "images/coloring-books/juniper-hollow/runs/artifact-smoketest"
-      ]
-    );
-
-    const runId = run.rows[0].id;
-
-    // 2) insert an artifact that "belongs" to that run
-    const artifact = await pool.query(
-      `
-      insert into artifacts (run_id, kind, path, metadata)
-      values ($1, $2, $3, $4::jsonb)
-      returning id, run_id, kind, path, created_at
-      `,
-      [
-        runId,
-        "image",
-        "images/coloring-books/juniper-hollow/runs/artifact-smoketest/page-01.png",
-        JSON.stringify({ note: "placeholder row, no file uploaded yet" })
-      ]
-    );
-
-    res.json({ ok: true, runId, artifact: artifact.rows[0] });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err?.message ?? String(err) });
-  }
-});
-
-/* --- One-time migration route (REMOVE after success) --- */
-app.get("/__admin/migrate-artifacts", async (req, res) => {
-  try {
-    // If you haven't set ADMIN_MIGRATE_TOKEN in Railway yet, this route should not run.
-    if (!ADMIN_MIGRATE_TOKEN) {
-      return res.status(500).send("ADMIN_MIGRATE_TOKEN is not set");
-    }
-
-    if (req.query.token !== ADMIN_MIGRATE_TOKEN) {
-      return res.status(401).send("Unauthorized");
-    }
-
     await pool.query(`
       create extension if not exists pgcrypto;
 
@@ -193,26 +140,6 @@ app.get("/__admin/migrate-artifacts", async (req, res) => {
 
       create index if not exists artifacts_run_idx on artifacts(run_id);
       create index if not exists artifacts_kind_idx on artifacts(kind);
-    `);
-
-    res.send("ok");
-  } catch (err) {
-    console.error(err);
-    res.status(500).send(err?.message ?? String(err));
-  }
-});
-
-app.get("/__admin/fix-artifacts-id-default", async (req, res) => {
-  try {
-    if (req.query.token !== process.env.ADMIN_MIGRATE_TOKEN) {
-      return res.status(401).send("Unauthorized");
-    }
-
-    await pool.query(`
-      create extension if not exists pgcrypto;
-
-      alter table artifacts
-        alter column id set default gen_random_uuid();
     `);
 
     res.send("ok");
