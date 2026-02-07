@@ -126,6 +126,47 @@ app.get("/db-test", async (_, res) => {
   }
 });
 
+app.get("/artifact-test", async (_, res) => {
+  try {
+    // 1) create a run (or reuse an existing run id if you want)
+    const run = await pool.query(
+      `
+      insert into runs (type, project, status, params, b2_prefix)
+      values ($1, $2, $3, $4::jsonb, $5)
+      returning id
+      `,
+      [
+        "image",
+        "juniper-hollow",
+        "queued",
+        JSON.stringify({ note: "artifact smoketest" }),
+        "images/coloring-books/juniper-hollow/runs/artifact-smoketest"
+      ]
+    );
+
+    const runId = run.rows[0].id;
+
+    // 2) insert an artifact that "belongs" to that run
+    const artifact = await pool.query(
+      `
+      insert into artifacts (run_id, kind, path, metadata)
+      values ($1, $2, $3, $4::jsonb)
+      returning id, run_id, kind, path, created_at
+      `,
+      [
+        runId,
+        "image",
+        "images/coloring-books/juniper-hollow/runs/artifact-smoketest/page-01.png",
+        JSON.stringify({ note: "placeholder row, no file uploaded yet" })
+      ]
+    );
+
+    res.json({ ok: true, runId, artifact: artifact.rows[0] });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err?.message ?? String(err) });
+  }
+});
+
 /* --- One-time migration route (REMOVE after success) --- */
 app.get("/__admin/migrate-artifacts", async (req, res) => {
   try {
